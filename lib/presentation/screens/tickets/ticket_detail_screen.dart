@@ -6,6 +6,7 @@ import 'package:animate_do/animate_do.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/ticket_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/supabase_provider.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
   final String ticketId;
@@ -17,6 +18,14 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   bool _isLoadingAction = false;
+  final _commentController = TextEditingController();
+  bool _isSubmittingComment = false;
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
 
   Color _getStatusColor(String status) {
     switch (status) {
@@ -88,6 +97,27 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     }
   }
 
+  Future<void> _submitComment(String userId) async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() => _isSubmittingComment = true);
+    try {
+      final repo = ref.read(ticketRepositoryProvider);
+      await repo.addComment(widget.ticketId, userId, text);
+      _commentController.clear();
+      ref.invalidate(ticketCommentsProvider(widget.ticketId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengirim komentar: $e', style: const TextStyle(color: Colors.white)), backgroundColor: AppColors.accent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
+    }
+  }
+
   void _showAssignHelpdeskDialog() {
     showModalBottomSheet(
       context: context,
@@ -139,7 +169,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                             onTap: () async {
                               if (_isLoadingAction) return;
                               _isLoadingAction = true;
-                              Navigator.pop(context); // Close bottom sheet
+                              Navigator.pop(context);
                               setState(() {});
                               try {
                                 await ref
@@ -202,6 +232,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   Widget build(BuildContext context) {
     final ticketAsync = ref.watch(ticketDetailProvider(widget.ticketId));
     final historyAsync = ref.watch(ticketHistoryProvider(widget.ticketId));
+    final attachmentsAsync = ref.watch(ticketAttachmentsProvider(widget.ticketId));
+    final commentsAsync = ref.watch(ticketCommentsProvider(widget.ticketId));
     final userAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
@@ -210,10 +242,10 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
           'Detail Tiket',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
+          icon: Icon(LucideIcons.arrowLeft, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -222,6 +254,15 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             }
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.gitCommit),
+            tooltip: 'Tracking Tiket',
+            onPressed: () {
+              context.push('/tickets/${widget.ticketId}/tracking');
+            },
+          ),
+        ],
       ),
       body: ticketAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -285,15 +326,54 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
                     ),
                     child: Text(ticket.description),
                   ),
+                  const SizedBox(height: 24),
+                  
+                  attachmentsAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, st) => Text('Error loading attachments: $e'),
+                    data: (attachments) {
+                      if (attachments.isEmpty) return const SizedBox.shrink();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Lampiran:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: attachments.length,
+                            itemBuilder: (context, index) {
+                              final attachment = attachments[index];
+                              final client = ref.read(supabaseClientProvider);
+                              final url = client.storage.from('ticket_attachments').getPublicUrl(attachment.filePath);
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    url,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Text('Gagal memuat gambar'),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                   const SizedBox(height: 32),
 
-                  // Actions based on role and status
                   if (user != null) ...[
                     if (user.role == 'helpdesk' &&
                         ticket.assignedHelpdeskId == user.id &&
@@ -354,7 +434,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                     const SizedBox(height: 32),
                   ],
 
-                  // History
                   const Text(
                     'Riwayat Status:',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
@@ -393,6 +472,80 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                       );
                     },
                   ),
+                  const SizedBox(height: 32),
+
+                  const Text(
+                    'Diskusi / Komentar:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 16),
+                  commentsAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, st) => Text('Error loading comments: $e'),
+                    data: (comments) {
+                      if (comments.isEmpty) return const Text('Belum ada diskusi');
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: comments.length,
+                        itemBuilder: (context, index) {
+                          final c = comments[index];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      c.userName ?? 'User',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '${c.createdAt.day.toString().padLeft(2, '0')}/${c.createdAt.month.toString().padLeft(2, '0')}/${c.createdAt.year} ${c.createdAt.hour.toString().padLeft(2, '0')}:${c.createdAt.minute.toString().padLeft(2, '0')}',
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(c.commentText),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  if (user != null && ticket.status != 'close') ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _commentController,
+                            decoration: const InputDecoration(
+                              hintText: 'Tulis komentar...',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: _isSubmittingComment
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.send, color: AppColors.primary),
+                          onPressed: _isSubmittingComment ? null : () => _submitComment(user.id),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

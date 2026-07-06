@@ -3,6 +3,8 @@ import '../../domain/models/ticket_model.dart';
 import '../../domain/models/ticket_history_model.dart';
 import '../../domain/models/comment_model.dart';
 import '../../domain/models/notification_model.dart';
+import '../../domain/models/attachment_model.dart';
+import 'dart:io';
 
 class TicketRepository {
   final SupabaseClient _supabase;
@@ -19,12 +21,30 @@ class TicketRepository {
     return TicketModel.fromJson(response);
   }
 
-  Future<void> createTicket(String title, String description, String userId) async {
-    await _supabase.from('tickets').insert({
+  Future<String> createTicket(String title, String description, String userId) async {
+    final response = await _supabase.from('tickets').insert({
       'title': title,
       'description': description,
       'user_id': userId,
+    }).select('id').single();
+    return response['id'];
+  }
+
+  Future<void> uploadAttachment(String ticketId, File file) async {
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
+    final filePath = '$ticketId/$fileName';
+    await _supabase.storage.from('ticket_attachments').upload(filePath, file);
+    
+    await _supabase.from('ticket_attachments').insert({
+      'ticket_id': ticketId,
+      'file_path': filePath,
+      'file_type': file.path.split('.').last,
     });
+  }
+
+  Future<List<AttachmentModel>> getAttachments(String ticketId) async {
+    final response = await _supabase.from('ticket_attachments').select().eq('ticket_id', ticketId).order('uploaded_at', ascending: true);
+    return (response as List).map((json) => AttachmentModel.fromJson(json)).toList();
   }
 
   Future<void> assignTicket(String ticketId, String helpdeskId) async {
@@ -47,12 +67,12 @@ class TicketRepository {
   }
 
   Future<List<TicketHistoryModel>> getTicketHistory(String ticketId) async {
-    final response = await _supabase.from('ticket_status_history').select().eq('ticket_id', ticketId).order('changed_at', ascending: true);
+    final response = await _supabase.from('ticket_status_history').select('*, users(name)').eq('ticket_id', ticketId).order('changed_at', ascending: true);
     return (response as List).map((json) => TicketHistoryModel.fromJson(json)).toList();
   }
 
   Future<List<CommentModel>> getComments(String ticketId) async {
-    final response = await _supabase.from('ticket_comments').select().eq('ticket_id', ticketId).order('created_at', ascending: true);
+    final response = await _supabase.from('ticket_comments').select('*, users(name, role)').eq('ticket_id', ticketId).order('created_at', ascending: true);
     return (response as List).map((json) => CommentModel.fromJson(json)).toList();
   }
 

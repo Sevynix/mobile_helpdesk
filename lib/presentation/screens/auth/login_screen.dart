@@ -54,13 +54,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppColors.background,
-              AppColors.surface,
+              Theme.of(context).scaffoldBackgroundColor,
+              Theme.of(context).colorScheme.surface,
             ],
           ),
         ),
@@ -74,7 +74,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Logo or Icon
                     Center(
                       child: Container(
                         padding: const EdgeInsets.all(20),
@@ -106,7 +105,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 48),
 
-                    // Email Input
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -117,7 +115,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password Input
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
@@ -135,9 +132,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 8),
+                    
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push('/forgot-password'),
+                        child: const Text('Lupa Password?', style: TextStyle(color: AppColors.primary)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-                    // Login Button
                     ElevatedButton(
                       onPressed: _isLoading ? null : _handleLogin,
                       child: _isLoading

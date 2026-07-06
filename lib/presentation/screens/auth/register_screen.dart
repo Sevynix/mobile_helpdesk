@@ -62,19 +62,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
+          icon: Icon(LucideIcons.arrowLeft, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () => context.go('/login'),
         ),
       ),
       extendBodyBehindAppBar: true,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppColors.background,
-              AppColors.surface,
+              Theme.of(context).scaffoldBackgroundColor,
+              Theme.of(context).colorScheme.surface,
             ],
           ),
         ),
@@ -103,7 +103,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 48),
 
-                    // Name Input
                     TextFormField(
                       controller: _nameController,
                       decoration: const InputDecoration(
@@ -113,7 +112,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Email Input
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -124,7 +122,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password Input
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
@@ -144,7 +141,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Register Button
                     ElevatedButton(
                       onPressed: _isLoading ? null : _handleRegister,
                       child: _isLoading

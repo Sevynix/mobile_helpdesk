@@ -5,24 +5,37 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../providers/ticket_provider.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../domain/models/ticket_model.dart';
 
 class TicketListScreen extends ConsumerWidget {
-  const TicketListScreen({super.key});
+  final bool isBottomNav;
+  
+  const TicketListScreen({super.key, this.isBottomNav = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsProvider);
+    final userAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Daftar Tiket', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppColors.textPrimary),
+        leading: isBottomNav ? null : IconButton(
+          icon: Icon(LucideIcons.arrowLeft, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () => context.go('/'),
         ),
+        actions: [
+          if (userAsync.value?.role == 'admin')
+            IconButton(
+              icon: const Icon(LucideIcons.filter),
+              onPressed: () {
+                _showFilterDialog(context, ref);
+              },
+            ),
+        ],
       ),
       body: ticketsAsync.when(
         data: (tickets) {
@@ -58,6 +71,69 @@ class TicketListScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Center(child: Text('Error: $e')),
       ),
+    );
+  }
+
+  void _showFilterDialog(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Consumer(
+          builder: (context, ref, child) {
+            final helpdesksAsync = ref.watch(helpdesksProvider);
+            final currentFilter = ref.watch(selectedHelpdeskFilterProvider);
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Filter by Helpdesk',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: const Text('Semua Tiket', style: TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: currentFilter == null ? const Icon(LucideIcons.check, color: AppColors.primary) : null,
+                    onTap: () {
+                      ref.read(selectedHelpdeskFilterProvider.notifier).setFilter(null);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  helpdesksAsync.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, st) => Text('Error: $e'),
+                    data: (helpdesks) {
+                      if (helpdesks.isEmpty) return const Text('Belum ada helpdesk');
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: helpdesks.length,
+                        itemBuilder: (context, index) {
+                          final h = helpdesks[index];
+                          return ListTile(
+                            title: Text(h.name),
+                            subtitle: Text(h.email),
+                            trailing: currentFilter == h.id ? const Icon(LucideIcons.check, color: AppColors.primary) : null,
+                            onTap: () {
+                              ref.read(selectedHelpdeskFilterProvider.notifier).setFilter(h.id);
+                              Navigator.pop(context);
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -103,7 +179,7 @@ class _TicketCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
