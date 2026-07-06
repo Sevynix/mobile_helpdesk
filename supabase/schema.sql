@@ -276,3 +276,62 @@ CREATE POLICY "Update notifikasi sendiri" ON notifications FOR UPDATE USING (
     auth.uid() = user_id
 );
 CREATE POLICY "Tolak buat notifikasi langsung" ON notifications FOR INSERT WITH CHECK (false);
+
+CREATE OR REPLACE FUNCTION get_dashboard_stats()
+RETURNS JSON AS $$
+DECLARE
+    v_total INT;
+    v_open INT;
+    v_assign INT;
+    v_on_progress INT;
+    v_close INT;
+    v_user_role user_role;
+    v_actor_id UUID;
+BEGIN
+    v_actor_id := auth.uid();
+    SELECT role INTO v_user_role FROM users WHERE id = v_actor_id;
+
+    IF v_user_role = 'admin' THEN
+        SELECT count(*) INTO v_total FROM tickets;
+        SELECT count(*) INTO v_open FROM tickets WHERE status = 'open';
+        SELECT count(*) INTO v_assign FROM tickets WHERE status = 'assign';
+        SELECT count(*) INTO v_on_progress FROM tickets WHERE status = 'on_progress';
+        SELECT count(*) INTO v_close FROM tickets WHERE status = 'close';
+    ELSIF v_user_role = 'helpdesk' THEN
+        SELECT count(*) INTO v_total FROM tickets WHERE assigned_helpdesk_id = v_actor_id;
+        SELECT count(*) INTO v_assign FROM tickets WHERE assigned_helpdesk_id = v_actor_id AND status = 'assign';
+        SELECT count(*) INTO v_on_progress FROM tickets WHERE assigned_helpdesk_id = v_actor_id AND status = 'on_progress';
+        SELECT count(*) INTO v_close FROM tickets WHERE assigned_helpdesk_id = v_actor_id AND status = 'close';
+        v_open := 0; 
+    ELSE
+        SELECT count(*) INTO v_total FROM tickets WHERE user_id = v_actor_id;
+        SELECT count(*) INTO v_open FROM tickets WHERE user_id = v_actor_id AND status = 'open';
+        SELECT count(*) INTO v_assign FROM tickets WHERE user_id = v_actor_id AND status = 'assign';
+        SELECT count(*) INTO v_on_progress FROM tickets WHERE user_id = v_actor_id AND status = 'on_progress';
+        SELECT count(*) INTO v_close FROM tickets WHERE user_id = v_actor_id AND status = 'close';
+    END IF;
+
+    RETURN json_build_object(
+        'total', v_total,
+        'open', v_open,
+        'assign', v_assign,
+        'on_progress', v_on_progress,
+        'close', v_close
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION reset_password_bypass(p_email text, p_new_password text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE auth.users
+  SET encrypted_password = extensions.crypt(p_new_password, extensions.gen_salt('bf'))
+  WHERE email = p_email;
+END;
+$$;
